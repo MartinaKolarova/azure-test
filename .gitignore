@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Azure Function secrets
+**/local.settings.json
+
+# Node environment files
+**/.env
+
+# Optional OAuth/token files (pokud by se někdy objevily)
+**/credentials.json
+**/token.json
