@@ -5,8 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.CognitiveServices.Vision.ComputerVision;
 using Microsoft.Azure.CognitiveServices.Vision.ComputerVision.Models;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Microsoft.Data.SqlClient;
 
@@ -15,10 +14,9 @@ namespace ProcessImage
     public class ProcessImage
     {
         // Azure Function name and output Binding to Table Storage
-        [FunctionName("ProcessImageUpload")]
-        [return: Table("ImageText", Connection = "StorageConnection")]
+[Function("ProcessImageUpload")]       
         // Trigger binding runs when an image is uploaded to the blob container below
-        public async Task<ImageContent> Run([BlobTrigger("imageanalysis/{name}", Connection = "StorageConnection")]Stream myBlob, string name, ILogger log)
+        public async Task Run([BlobTrigger("imageanalysis/{name}", Connection = "StorageConnection")]Stream myBlob, string name, ILogger log)
         {
             // Get connection configurations
             string subscriptionKey = Environment.GetEnvironmentVariable("ComputerVisionKey");
@@ -52,19 +50,6 @@ using (SqlConnection connection = new SqlConnection(connectionString))
         await command.ExecuteNonQueryAsync();
     }
 }
-
-return new ImageContent
-{
-    PartitionKey = "Images",
-    RowKey = Guid.NewGuid().ToString(),
-    Text = textContext
-};
-        }
-        public class ImageContent
-        {
-            public string PartitionKey { get; set; }
-            public string RowKey { get; set; }
-            public string Text { get; set; }
         }
 
         static async Task<string> AnalyzeImageContent(ComputerVisionClient client, Stream fileStream)
