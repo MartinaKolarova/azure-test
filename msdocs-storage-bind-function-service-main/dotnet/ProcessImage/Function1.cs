@@ -8,6 +8,7 @@ using Microsoft.Azure.CognitiveServices.Vision.ComputerVision.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Microsoft.Data.SqlClient;
+using Azure.Storage.Queues;
 
 namespace ProcessImage
 {
@@ -36,19 +37,42 @@ using (SqlConnection connection = new SqlConnection(connectionString))
 {
     await connection.OpenAsync();
 
-    string sql = @"
-        INSERT INTO photo_analysis
-        (file_name, ocr_text, created_at)
-        VALUES
-        (@file_name, @ocr_text, GETDATE())";
+string sql = @"
+    INSERT INTO candidates
+    (
+        cv_file_name,
+        ocr_text,
+        created_at
+    )
+    OUTPUT INSERTED.candidate_id
+    VALUES
+    (
+        @cv_file_name,
+        @ocr_text,
+        GETDATE()
+    )";
+
+    int candidateId;
 
     using (SqlCommand command = new SqlCommand(sql, connection))
     {
-        command.Parameters.AddWithValue("@file_name", name);
-        command.Parameters.AddWithValue("@ocr_text", textContext);
+ command.Parameters.AddWithValue("@cv_file_name", name);
+command.Parameters.AddWithValue("@ocr_text", textContext);
+candidateId = (int)await command.ExecuteScalarAsync();    }
+string storageConnection =
+    Environment.GetEnvironmentVariable("StorageConnection");
 
-        await command.ExecuteNonQueryAsync();
-    }
+QueueClient queueClient =
+    new QueueClient(
+        storageConnection,
+        "candidate-processing"
+    );
+
+await queueClient.CreateIfNotExistsAsync();
+
+await queueClient.SendMessageAsync(
+    candidateId.ToString()
+);
 }
         }
 
