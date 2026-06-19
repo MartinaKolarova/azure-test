@@ -63,6 +63,7 @@ namespace ProcessImage
                 string? profession;
                 string? skills;
                 string? email;
+                string? phone;
 
                 if (string.IsNullOrWhiteSpace(ocrText))
                 {
@@ -70,19 +71,22 @@ namespace ProcessImage
                     profession = null;
                     skills = null;
                     email = null;
+                    phone = null;
                 }
                 else
                 {
-                    status = "ENRICHED_EMAIL_TEST";
+                    status = "CONTACT_TEST";
                     profession = "ENRICHMENT_TEST";
                     skills = "ocr_loaded";
                     email = ExtractEmail(ocrText);
+                    phone = ExtractPhone(ocrText);
                 }
 
                 string updateSql = @"
                     UPDATE candidates
                     SET
                         email = @email,
+                        phone = @phone,
                         profession = @profession,
                         skills = @skills,
                         status = @status
@@ -100,6 +104,10 @@ namespace ProcessImage
                         (object?)email ?? DBNull.Value);
 
                     updateCommand.Parameters.AddWithValue(
+                        "@phone",
+                        (object?)phone ?? DBNull.Value);
+
+                    updateCommand.Parameters.AddWithValue(
                         "@profession",
                         (object?)profession ?? DBNull.Value);
 
@@ -115,7 +123,7 @@ namespace ProcessImage
                         await updateCommand.ExecuteNonQueryAsync();
 
                     log.LogInformation(
-                        $"CandidateId={candidateId}, OcrLoaded={!string.IsNullOrWhiteSpace(ocrText)}, Email={email}, RowsAffected={rowsAffected}");
+                        $"CandidateId={candidateId}, OcrLoaded={!string.IsNullOrWhiteSpace(ocrText)}, Email={email}, Phone={phone}, RowsAffected={rowsAffected}");
                 }
             }
         }
@@ -134,6 +142,34 @@ namespace ProcessImage
             }
 
             return null;
+        }
+
+        private static string? ExtractPhone(string text)
+        {
+            Match labeledPhone = Regex.Match(
+                text,
+                @"(?im)^\s*(tel\.?|telefon|phone|mobile|mobil)\s*[:\-]?\s*(\+?\d[\d\s().\-]{6,}\d)"
+            );
+
+            if (labeledPhone.Success)
+            {
+                return NormalizePhone(labeledPhone.Groups[2].Value);
+            }
+
+            return null;
+        }
+
+        private static string? NormalizePhone(string rawPhone)
+        {
+            string trimmed = Regex.Replace(rawPhone.Trim(), @"\s+", " ");
+            string digitsOnly = Regex.Replace(trimmed, @"\D", "");
+
+            if (digitsOnly.Length < 9 || digitsOnly.Length > 15)
+            {
+                return null;
+            }
+
+            return trimmed;
         }
     }
 }
