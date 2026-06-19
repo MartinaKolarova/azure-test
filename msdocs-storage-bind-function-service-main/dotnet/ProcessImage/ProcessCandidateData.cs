@@ -4,6 +4,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Microsoft.Data.SqlClient;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace ProcessImage
 {
@@ -50,41 +51,50 @@ namespace ProcessImage
                         "@candidate_id",
                         parsedCandidateId);
 
-                    object result =
-                        await selectCommand.ExecuteScalarAsync();
-
-                    if (result != null && result != DBNull.Value)
+                    using (SqlDataReader reader =
+                        await selectCommand.ExecuteReaderAsync())
                     {
-                        ocrText = result.ToString();
+                        if (await reader.ReadAsync())
+                        {
+                            if (reader["ocr_text"] != DBNull.Value)
+                            {
+                                ocrText = reader["ocr_text"].ToString();
+                            }
+
+                        }
                     }
                 }
 
                 string status;
+                string? fullName;
                 string? profession;
                 string? skills;
                 string? email;
                 string? phone;
 
-                if (string.IsNullOrWhiteSpace(ocrText))
-                {
-                    status = "NO_OCR_TEXT";
-                    profession = null;
-                    skills = null;
-                    email = null;
-                    phone = null;
-                }
-                else
-                {
-                    status = "ENRICHED_CONTACT";
-                    profession = "ENRICHMENT_TEST";
-                    skills = "ocr_loaded";
-                    email = ExtractEmail(ocrText);
-                    phone = ExtractPhone(ocrText);
-                }
+if (string.IsNullOrWhiteSpace(ocrText))
+{
+    status = "NO_OCR_TEXT";
+    fullName = null;
+    profession = null;
+    skills = null;
+    email = null;
+    phone = null;
+}
+else
+{
+    status = "ENRICHED_CONTACT";
+    fullName = ExtractFullNameFromOcr(ocrText);
+    profession = "ENRICHMENT_TEST";
+    skills = "ocr_loaded";
+    email = ExtractEmail(ocrText);
+    phone = ExtractPhone(ocrText);
+}
 
                 string updateSql = @"
                     UPDATE candidates
                     SET
+                        full_name = @full_name,
                         email = @email,
                         phone = @phone,
                         profession = @profession,
@@ -98,6 +108,10 @@ namespace ProcessImage
                     updateCommand.Parameters.AddWithValue(
                         "@candidate_id",
                         parsedCandidateId);
+
+                    updateCommand.Parameters.AddWithValue(
+                        "@full_name",
+                        (object?)fullName ?? DBNull.Value);
 
                     updateCommand.Parameters.AddWithValue(
                         "@email",
@@ -123,7 +137,7 @@ namespace ProcessImage
                         await updateCommand.ExecuteNonQueryAsync();
 
                     log.LogInformation(
-                        $"CandidateId={candidateId}, OcrLoaded={!string.IsNullOrWhiteSpace(ocrText)}, Email={email}, Phone={phone}, RowsAffected={rowsAffected}");
+                        $"CandidateId={candidateId}, OcrLoaded={!string.IsNullOrWhiteSpace(ocrText)}, FullName={fullName}, Email={email}, Phone={phone}, RowsAffected={rowsAffected}");
                 }
             }
         }
@@ -171,5 +185,87 @@ namespace ProcessImage
 
             return trimmed;
         }
+
+       private static string? ExtractFullNameFromOcr(string text)
+{
+    string[] lines = text
+        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+    foreach (string rawLine in lines.Take(20))
+    {
+        string line = CleanOcrLine(rawLine);
+
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            continue;
+        }
+
+        if (ShouldSkipFullNameLine(line))
+        {
+            continue;
+        }
+
+        if (IsLikelyFullName(line))
+        {
+            return line;
+        }
+    }
+
+    return null;
+}
+private static string CleanOcrLine(string line)
+{
+    line = line.Trim();
+    line = Regex.Replace(line, @"^[•\-–—\s]+", "");
+    line = Regex.Replace(line, @"\s+", " ");
+
+    return line.Trim();
+}
+
+private static bool ShouldSkipFullNameLine(string line)
+{
+    string lower = line.ToLowerInvariant();
+
+    string[] skipWords =
+    {
+        "curriculum",
+        "vitae",
+        "resume",
+        "životopis",
+        "cv",
+        "email",
+        "e-mail",
+        "phone",
+        "telefon",
+        "mobile",
+        "mobil",
+        "address",
+        "adresa",
+        "profile",
+        "profil"
+    };
+
+    return skipWords.Any(lower.Contains);
+}
+
+private static bool IsLikelyFullName(string line)
+{
+    if (line.Length > 80)
+    {
+        return false;
+    }
+
+    string[] words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    if (words.Length < 2 || words.Length > 4)
+    {
+        return false;
+    }
+
+    return Regex.IsMatch(
+        line,
+        @"^\p{Lu}[\p{L}'\-]+(?:\s+\p{Lu}[\p{L}'\-]+){1,3}$"
+    );
+}
     }
 }
