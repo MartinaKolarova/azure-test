@@ -75,7 +75,7 @@ namespace ProcessImage
                 }
                 else
                 {
-                    status = "CONTACT_TEST";
+                    status = "ENRICHED_CONTACT";
                     profession = "ENRICHMENT_TEST";
                     skills = "ocr_loaded";
                     email = ExtractEmail(ocrText);
