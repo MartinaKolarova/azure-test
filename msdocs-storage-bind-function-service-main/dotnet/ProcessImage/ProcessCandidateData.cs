@@ -79,10 +79,20 @@ if (string.IsNullOrWhiteSpace(ocrText))
 }
 else
 {
-    status = "ENRICHED_CONTACT";
-    fullName = ExtractFullNameFromOcr(ocrText);
-    email = ExtractEmail(ocrText);
-    phone = ExtractPhone(ocrText);
+  fullName = ExtractFullNameFromOcr(ocrText);
+email = ExtractEmail(ocrText);
+phone = ExtractPhone(ocrText);
+
+if (!string.IsNullOrWhiteSpace(fullName)
+    && !string.IsNullOrWhiteSpace(email)
+    && !string.IsNullOrWhiteSpace(phone))
+{
+    status = "CONTACT_DONE";
+}
+else
+{
+    status = "CONTACT_PARTIAL";
+}
 }
 
                 string updateSql = @"
