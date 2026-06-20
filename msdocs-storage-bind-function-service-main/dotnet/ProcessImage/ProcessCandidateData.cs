@@ -67,8 +67,6 @@ namespace ProcessImage
 
                 string status;
                 string? fullName;
-                string? profession;
-                string? skills;
                 string? email;
                 string? phone;
 
@@ -76,8 +74,6 @@ if (string.IsNullOrWhiteSpace(ocrText))
 {
     status = "NO_OCR_TEXT";
     fullName = null;
-    profession = null;
-    skills = null;
     email = null;
     phone = null;
 }
@@ -85,8 +81,6 @@ else
 {
     status = "ENRICHED_CONTACT";
     fullName = ExtractFullNameFromOcr(ocrText);
-    profession = "ENRICHMENT_TEST";
-    skills = "ocr_loaded";
     email = ExtractEmail(ocrText);
     phone = ExtractPhone(ocrText);
 }
@@ -97,8 +91,6 @@ else
                         full_name = @full_name,
                         email = @email,
                         phone = @phone,
-                        profession = @profession,
-                        skills = @skills,
                         status = @status
                     WHERE candidate_id = @candidate_id";
 
@@ -120,14 +112,6 @@ else
                     updateCommand.Parameters.AddWithValue(
                         "@phone",
                         (object?)phone ?? DBNull.Value);
-
-                    updateCommand.Parameters.AddWithValue(
-                        "@profession",
-                        (object?)profession ?? DBNull.Value);
-
-                    updateCommand.Parameters.AddWithValue(
-                        "@skills",
-                        (object?)skills ?? DBNull.Value);
 
                     updateCommand.Parameters.AddWithValue(
                         "@status",
