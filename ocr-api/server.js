@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const { getConnection } = require('./db');
+
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
@@ -15,15 +17,22 @@ app.get('/candidates', async (req, res) => {
 
     const result = await pool.request().query(`
       SELECT
-        id,
-        file_name,
+        candidate_id AS id,
+        cv_file_name AS file_name,
+        full_name,
+        email,
+        phone,
+        status,
         ocr_text,
-        detected_objects,
         created_at
-      FROM photo_analysis
+      FROM candidates
+      WHERE status IS NULL
+         OR status <> 'DUPLICATE'
       ORDER BY created_at DESC
     `);
-    console.log(`Returned ${result.recordset.length} records`);
+
+    console.log(`Returned ${result.recordset.length} candidates`);
+
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -33,6 +42,7 @@ app.get('/candidates', async (req, res) => {
     });
   }
 });
+
 app.get('/candidates/search/:text', async (req, res) => {
   try {
     const searchText = req.params.text;
@@ -42,18 +52,28 @@ app.get('/candidates/search/:text', async (req, res) => {
     const result = await pool.request().input('searchText', `%${searchText}%`)
       .query(`
         SELECT
-          id,
-          file_name,
+          candidate_id AS id,
+          cv_file_name AS file_name,
+          full_name,
+          email,
+          phone,
+          status,
           ocr_text,
-          detected_objects,
           created_at
-        FROM photo_analysis
-        WHERE ocr_text LIKE @searchText
+        FROM candidates
+        WHERE
+          (status IS NULL OR status <> 'DUPLICATE')
+          AND (
+            ocr_text LIKE @searchText
+            OR full_name LIKE @searchText
+            OR email LIKE @searchText
+            OR phone LIKE @searchText
+          )
         ORDER BY created_at DESC
       `);
 
     console.log(
-      `Search "${searchText}" returned ${result.recordset.length} records`,
+      `Search "${searchText}" returned ${result.recordset.length} candidates`,
     );
 
     res.json(result.recordset);
@@ -65,6 +85,7 @@ app.get('/candidates/search/:text', async (req, res) => {
     });
   }
 });
+
 app.get('/candidates/:id', async (req, res) => {
   try {
     const candidateId = req.params.id;
@@ -73,13 +94,16 @@ app.get('/candidates/:id', async (req, res) => {
 
     const result = await pool.request().input('id', candidateId).query(`
         SELECT
-          id,
-          file_name,
+          candidate_id AS id,
+          cv_file_name AS file_name,
+          full_name,
+          email,
+          phone,
+          status,
           ocr_text,
-          detected_objects,
           created_at
-        FROM photo_analysis
-        WHERE id = @id
+        FROM candidates
+        WHERE candidate_id = @id
       `);
 
     res.json(result.recordset);
