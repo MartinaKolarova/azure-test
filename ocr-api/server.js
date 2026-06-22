@@ -1,11 +1,20 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
+const { SearchClient, AzureKeyCredential } = require('@azure/search-documents');
 const { getConnection } = require('./db');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+const searchClient = new SearchClient(
+  process.env.AZURE_SEARCH_ENDPOINT,
+  process.env.AZURE_SEARCH_INDEX_NAME,
+  new AzureKeyCredential(process.env.AZURE_SEARCH_API_KEY),
+);
 
 app.get('/', (req, res) => {
   res.send('OCR API is running');
@@ -47,41 +56,47 @@ app.get('/candidates/search/:text', async (req, res) => {
   try {
     const searchText = req.params.text;
 
-    const pool = await getConnection();
+    const searchResults = await searchClient.search(searchText, {
+      filter: "status ne 'DUPLICATE'",
+      select: [
+        'candidate_id',
+        'cv_file_name',
+        'full_name',
+        'email',
+        'phone',
+        'status',
+        'ocr_text',
+      ],
+      top: 50,
+    });
 
-    const result = await pool.request().input('searchText', `%${searchText}%`)
-      .query(`
-        SELECT
-          candidate_id AS id,
-          cv_file_name AS file_name,
-          full_name,
-          email,
-          phone,
-          status,
-          ocr_text,
-          created_at
-        FROM candidates
-        WHERE
-          (status IS NULL OR status <> 'DUPLICATE')
-          AND (
-            ocr_text LIKE @searchText
-            OR full_name LIKE @searchText
-            OR email LIKE @searchText
-            OR phone LIKE @searchText
-          )
-        ORDER BY created_at DESC
-      `);
+    const candidates = [];
+
+    for await (const result of searchResults.results) {
+      const document = result.document;
+
+      candidates.push({
+        id: document.candidate_id,
+        file_name: document.cv_file_name,
+        full_name: document.full_name,
+        email: document.email,
+        phone: document.phone,
+        status: document.status,
+        ocr_text: document.ocr_text,
+        score: result.score,
+      });
+    }
 
     console.log(
-      `Search "${searchText}" returned ${result.recordset.length} candidates`,
+      `Azure AI Search "${searchText}" returned ${candidates.length} candidates`,
     );
 
-    res.json(result.recordset);
+    res.json(candidates);
   } catch (error) {
     console.error(error);
 
     res.status(500).json({
-      error: 'Database error',
+      error: 'Azure AI Search error',
     });
   }
 });
