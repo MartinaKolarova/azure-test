@@ -5,10 +5,21 @@ const cors = require('cors');
 const { SearchClient, AzureKeyCredential } = require('@azure/search-documents');
 const { getConnection } = require('./db');
 const OpenAI = require('openai');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 
-app.use(cors());
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+});
+
+app.use('/candidates/rag-answer', aiLimiter);
+app.use(
+  cors({
+    origin: 'http://localhost:5173',
+  }),
+);
 app.use(express.json());
 
 const searchClient = new SearchClient(
@@ -108,8 +119,13 @@ app.get('/candidates/search/:text', async (req, res) => {
 });
 app.get('/candidates/rag/:question', async (req, res) => {
   try {
-    const question = req.params.question;
+    const question = req.params.question?.trim();
 
+    if (!question || question.length > 500) {
+      return res.status(400).json({
+        error: 'Question is required and must be shorter than 500 characters.',
+      });
+    }
     const searchResults = await searchClient.search(question, {
       filter: "status ne 'DUPLICATE'",
       select: [
@@ -202,10 +218,15 @@ ${context}
   }
 });
 
-app.get('/candidates/rag-answer/:question', async (req, res) => {
+app.get('/candidates/rag-answer/:question', aiLimiter, async (req, res) => {
   try {
-    const question = req.params.question;
+    const question = req.params.question?.trim();
 
+    if (!question || question.length > 500) {
+      return res.status(400).json({
+        error: 'Question is required and must be shorter than 500 characters.',
+      });
+    }
     const searchResults = await searchClient.search(question, {
       filter: "status ne 'DUPLICATE'",
       select: [
@@ -314,7 +335,6 @@ Pravidla:
 
     res.status(500).json({
       error: 'RAG answer error',
-      detail: error.message,
     });
   }
 });
