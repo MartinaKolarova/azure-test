@@ -5,6 +5,10 @@ function App() {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiAnswer, setAiAnswer] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
 
   useEffect(() => {
     async function loadCandidates() {
@@ -31,9 +35,97 @@ function App() {
     loadCandidates();
   }, []);
 
+  async function askAi() {
+    if (!aiQuestion.trim()) {
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError(null);
+    setAiAnswer(null);
+
+    try {
+      const encodedQuestion = encodeURIComponent(aiQuestion);
+
+      const response = await fetch(
+        `http://localhost:3000/candidates/rag-answer/${encodedQuestion}`,
+      );
+
+      if (!response.ok) {
+        throw new Error(`AI API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      console.log('AI answer:', data);
+
+      setAiAnswer(data);
+    } catch (error) {
+      console.error(error);
+      setAiError(error.message);
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   return (
     <div style={{ padding: '24px', fontFamily: 'Arial, sans-serif' }}>
       <h1>OCR Candidates</h1>
+      <div
+        style={{
+          border: '1px solid #ccc',
+          padding: '16px',
+          marginBottom: '24px',
+          borderRadius: '8px',
+        }}
+      >
+        <h2>AI vyhodnocení kandidátů</h2>
+
+        <textarea
+          value={aiQuestion}
+          onChange={(event) => setAiQuestion(event.target.value)}
+          placeholder="Zeptej se na kandidáty..."
+          rows={3}
+          style={{
+            width: '100%',
+            padding: '8px',
+            marginBottom: '8px',
+            fontFamily: 'Arial, sans-serif',
+          }}
+        />
+
+        <button onClick={askAi} disabled={aiLoading || !aiQuestion.trim()}>
+          {aiLoading ? 'AI přemýšlí...' : 'Zeptat se AI'}
+        </button>
+
+        {aiError && (
+          <p style={{ color: 'red' }}>
+            <strong>AI error:</strong> {aiError}
+          </p>
+        )}
+
+        {aiAnswer && (
+          <div style={{ marginTop: '16px' }}>
+            <h3>Odpověď</h3>
+
+            <div
+              style={{
+                whiteSpace: 'pre-wrap',
+                background: '#f5f5f5',
+                padding: '12px',
+                borderRadius: '8px',
+                lineHeight: 1.5,
+              }}
+            >
+              {aiAnswer.answer}
+            </div>
+            <p>
+              <strong>Nalezeno kandidátů:</strong>{' '}
+              {aiAnswer.retrieved_candidates_count}
+            </p>
+          </div>
+        )}
+      </div>
 
       {loading && <p>Loading candidates...</p>}
 
@@ -131,7 +223,7 @@ function App() {
               whiteSpace: 'pre-wrap',
               background: '#e5a9e0ea',
               padding: '12px',
-              fontcolor: 'white',
+              color: 'white',
               borderRadius: '15px',
             }}
           >
