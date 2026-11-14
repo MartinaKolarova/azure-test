@@ -9,6 +9,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Microsoft.Data.SqlClient;
 using Azure.Storage.Queues;
+using Azure.Storage.Queues.Models;
 
 namespace ProcessImage
 {
@@ -65,7 +66,11 @@ string storageConnection =
 QueueClient queueClient =
     new QueueClient(
         storageConnection,
-        "candidate-processing"
+        "candidate-processing",
+    new QueueClientOptions
+    {
+        MessageEncoding = QueueMessageEncoding.Base64
+    }
     );
 
 await queueClient.CreateIfNotExistsAsync();
