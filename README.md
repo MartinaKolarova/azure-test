@@ -192,7 +192,8 @@ Frontend features:
 
 The API includes basic safety measures for the RAG endpoint:
 
-- CORS restricted to the local React frontend
+- API bound to `127.0.0.1`, with Host and Origin checks before route handlers
+- CORS restricted to the local React development and preview frontends
 - rate limiting for AI requests
 - question length validation
 - duplicate candidates filtered out
@@ -200,6 +201,32 @@ The API includes basic safety measures for the RAG endpoint:
 - technical error details are not exposed in API responses
 
 Secrets and API keys are stored in local environment variables and should not be committed to Git.
+
+### Local-only operation
+
+Run the API with `node server.js` from `ocr-api`, and the frontend with
+`npm run dev` from `ocr-frontend`. Open `http://127.0.0.1:5173`.
+The frontend binds to loopback on port 5173 (preview uses 4173); it stops if
+the port is occupied instead of silently choosing a different port. Do not
+override the host with `--host 0.0.0.0` or expose these services through a tunnel.
+
+The API accepts local frontend origins on ports 5173 and 4173 and same-origin
+API requests. It rejects other supplied origins, unexpected Host headers, and
+browser requests marked cross-site when they have no Origin. Local command-line
+agents without an Origin header still work. These checks are not user
+authentication: other processes on this computer can call the API. Shared
+deployment requires authentication and authorization before exposing it.
+
+Use `ocr_api_reader` for the API's SQL connection and `ocr_functions_writer`
+for Functions. Azure app settings and local `local.settings.json` are separate;
+update each privately. Keep `.env` and `local.settings.json` ignored and readable
+only by their owner (file mode `600` on macOS). Never put credentials in frontend
+code or `VITE_*` variables.
+
+Run `npm test` in `ocr-api` for synthetic local-access checks. These tests do not
+load credentials or contact Azure. SQL firewall rules based on the current
+Functions outbound IP list may need maintenance on the Consumption plan; they
+are separate from the API's local-only boundary.
 
 ## Architecture
 

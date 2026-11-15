@@ -6,8 +6,14 @@ const { SearchClient, AzureKeyCredential } = require('@azure/search-documents');
 const { getConnection } = require('./db');
 const OpenAI = require('openai');
 const rateLimit = require('express-rate-limit');
+const { createLocalAccessGuard, frontendOrigins } = require('./local-access');
 
 const app = express();
+const PORT = Number(process.env.PORT || 3000);
+const HOST = '127.0.0.1';
+
+// Reject untrusted browser requests before database, search, or model work.
+app.use(createLocalAccessGuard(PORT));
 
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -17,7 +23,7 @@ const aiLimiter = rateLimit({
 app.use('/candidates/rag-answer', aiLimiter);
 app.use(
   cors({
-    origin: 'http://localhost:5173',
+    origin: frontendOrigins,
   }),
 );
 app.use(express.json());
@@ -368,9 +374,6 @@ app.get('/candidates/:id', async (req, res) => {
     });
   }
 });
-
-const PORT = process.env.PORT || 3000;
-const HOST = '127.0.0.1';
 
 app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
