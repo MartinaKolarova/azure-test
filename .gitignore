@@ -7,6 +7,9 @@
 # Node environment files
 **/.env
 
+# Dedicated Azure CLI profile: contains SQL reader authentication tokens
+/ocr-api/.azure-sql/
+
 # Optional OAuth/token files (pokud by se někdy objevily)
 **/credentials.json
 **/token.json

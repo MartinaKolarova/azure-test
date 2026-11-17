@@ -1,27 +1,25 @@
 const sql = require('mssql');
-require('dotenv').config();
+const path = require('node:path');
+const { AzureCliCredential } = require('@azure/identity');
+const { buildDatabaseConfig } = require('./db-config');
+const { createConnectionProvider } = require('./db-connection');
+const { cliConfigDirectory, createReaderCredential } = require('./sql-entra');
+require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
 
-const config = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER,
-  database: process.env.DB_NAME,
+const { config, settings } = buildDatabaseConfig(process.env, (identity) => {
+  // This process uses only the SQL reader's CLI profile, never ~/.azure.
+  process.env.AZURE_CONFIG_DIR = cliConfigDirectory;
+  return createReaderCredential(new AzureCliCredential({
+    tenantId: identity.tenantId,
+    processTimeoutInMs: 15000,
+  }), identity);
+});
 
-  options: {
-    encrypt: true,
-    trustServerCertificate: false,
-  },
-};
-
-async function getConnection() {
-  try {
-    const pool = await sql.connect(config);
-    return pool;
-  } catch (error) {
-    console.error('Database connection error:', error);
-    throw error;
-  }
-}
+const getConnection = createConnectionProvider(() => {
+  const pool = new sql.ConnectionPool(config);
+  pool.on('error', () => console.error('SQL connection pool error.'));
+  return pool;
+}, settings);
 
 module.exports = {
   sql,

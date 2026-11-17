@@ -228,6 +228,54 @@ load credentials or contact Azure. SQL firewall rules based on the current
 Functions outbound IP list may need maintenance on the Consumption plan; they
 are separate from the API's local-only boundary.
 
+### Local API SQL authentication with Microsoft Entra
+
+The API supports an explicit migration switch, `DB_AUTH_MODE=entra`. Until that
+switch is set, the existing SQL-password configuration remains active. In Entra
+mode, `DB_USER` and `DB_PASSWORD` are ignored and authentication failures never
+fall back to them. The migration is not complete until the live reader test
+passes and unused SQL-password access is removed.
+
+1. Create a dedicated non-admin Entra developer account and its contained user
+   in the application database. Grant only `SELECT` on `dbo.candidates`.
+2. Copy the entries from `ocr-api/.env.entra.example` into the private
+   `ocr-api/.env`, replacing the placeholders locally. The tenant GUID is from
+   Entra Overview; the object GUID is from the reader **user**, not a managed
+   identity or app registration. Keep the existing `DB_SERVER` and `DB_NAME`.
+3. From `ocr-api`, run `npm run login:sql`. Open the displayed Microsoft device
+   login page yourself and sign in as the dedicated reader. Never share the
+   device code or use the database administrator account. The script does not
+   open a browser and uses `--allow-no-subscriptions`; this reader needs SQL
+   access, not a subscription management role.
+   Login requests the Azure management scope so CLI subscription discovery can
+   complete its MFA challenge. This grants no management role; the API requests
+   a separate SQL token. Complete any MFA prompt as the dedicated reader.
+4. Restart the API and verify reading through the frontend. The API checks the
+   CLI account before acquiring SQL tokens, and checks the database user's
+   object ID, `SELECT`, absence of candidate write/alter rights and absence of
+   database `CONTROL` before returning the pool to route handlers.
+5. After live verification, remove the unused `DB_USER` and `DB_PASSWORD` entries
+   privately. Retire the old SQL user only after checking all its consumers.
+
+The Azure CLI profile in `ocr-api/.azure-sql/` contains sensitive cached login
+data. It is ignored by Git and created with owner-only directory permissions.
+Never copy it into builds, archives or deployments. It is separate from the
+normal Azure CLI profile. Run `npm run logout:sql` to sign out of this dedicated
+profile after stopping the API. Browser and DBeaver logins are separate sessions;
+CLI logout does not sign those out or terminate existing database connections.
+The API never automatically opens a login page or uses a different credential
+source such as an admin IDE login.
+
+The database identity/permission check is a defense against wrong-account
+selection, not a complete audit of all SQL grants, roles or stored procedures.
+Keep the reader out of administrative roles and groups. Tenant and object IDs
+are identifiers, not credentials; they can still be kept private in `.env`.
+
+Azure Functions use their own managed identity via the Azure `SqlConnection`
+setting with `Authentication=Active Directory Managed Identity`. This is
+separate from local API authentication. Local Functions configuration is also
+separate and must not use the cloud managed-identity setting on a developer Mac.
+
 ## Architecture
 
 ```text
