@@ -56,13 +56,30 @@ test('invalid Entra settings never fall back to SQL passwords', () => {
   assert.throws(() => buildDatabaseConfig({ ...env, DB_AUTH_MODE: 'entraa' }, () => ({})));
 });
 
-test('temporary SQL mode never uses an Entra credential', () => {
-  const { config, settings: identity } = buildDatabaseConfig({ ...env, DB_AUTH_MODE: 'sql' }, () => {
-    throw new Error('Must not run');
-  });
-  assert.equal(config.user, env.DB_USER);
-  assert.equal(config.authentication, undefined);
-  assert.equal(identity, null);
+test('legacy SQL mode is rejected even with SQL credentials present', () => {
+  for (const mode of ['sql', '', 'entraa']) {
+    assert.throws(() => buildDatabaseConfig({ ...env, DB_AUTH_MODE: mode }, () => {
+      assert.fail('Invalid mode must fail before credential construction');
+    }), /Only DB_AUTH_MODE=entra/);
+  }
+});
+
+test('omitting the migration switch still requires Entra and never SQL passwords', () => {
+  const withoutMode = { ...env };
+  delete withoutMode.DB_AUTH_MODE;
+  const { config, settings: identity } = buildDatabaseConfig(withoutMode, () => ({}));
+  assert.equal(config.authentication.type, 'token-credential');
+  assert.equal('user' in config, false);
+  assert.equal('password' in config, false);
+  assert.equal(identity.objectId, settings.objectId);
+  delete withoutMode.AZURE_TENANT_ID;
+  assert.throws(() => buildDatabaseConfig(withoutMode, () => ({})), /AZURE_TENANT_ID/);
+});
+
+test('pool cannot bypass SQL identity checks by omitting Entra settings', () => {
+  assert.throws(() => createConnectionProvider(() => {
+    assert.fail('No pool may be created');
+  }, null), /Entra reader settings are required/);
 });
 
 test('CLI account must match tenant, user and account type', () => {

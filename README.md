@@ -217,9 +217,9 @@ agents without an Origin header still work. These checks are not user
 authentication: other processes on this computer can call the API. Shared
 deployment requires authentication and authorization before exposing it.
 
-Use `ocr_api_reader` for the API's SQL connection and `ocr_functions_writer`
-for Functions. Azure app settings and local `local.settings.json` are separate;
-update each privately. Keep `.env` and `local.settings.json` ignored and readable
+Use a dedicated read-only Entra user for the API and the Function App's managed
+identity for cloud Functions. Azure app settings and local `local.settings.json`
+are separate; update each privately. Keep `.env` and `local.settings.json` ignored and readable
 only by their owner (file mode `600` on macOS). Never put credentials in frontend
 code or `VITE_*` variables.
 
@@ -230,11 +230,10 @@ are separate from the API's local-only boundary.
 
 ### Local API SQL authentication with Microsoft Entra
 
-The API supports an explicit migration switch, `DB_AUTH_MODE=entra`. Until that
-switch is set, the existing SQL-password configuration remains active. In Entra
-mode, `DB_USER` and `DB_PASSWORD` are ignored and authentication failures never
-fall back to them. The migration is not complete until the live reader test
-passes and unused SQL-password access is removed.
+The API supports only Microsoft Entra authentication. `DB_AUTH_MODE=entra` is
+optional; omitting it still uses Entra. Other values, including `sql`, are rejected.
+`DB_USER` and `DB_PASSWORD` are never used. Missing Entra configuration or failed
+authentication stops database access instead of falling back to SQL passwords.
 
 1. Create a dedicated non-admin Entra developer account and its contained user
    in the application database. Grant only `SELECT` on `dbo.candidates`.
@@ -255,7 +254,15 @@ passes and unused SQL-password access is removed.
    object ID, `SELECT`, absence of candidate write/alter rights and absence of
    database `CONTROL` before returning the pool to route handlers.
 5. After live verification, remove the unused `DB_USER` and `DB_PASSWORD` entries
-   privately. Retire the old SQL user only after checking all its consumers.
+   privately. After verifying cloud Functions with managed identity and retiring
+   any other consumers of the old accounts, run
+   `scripts/sql/retire-legacy-sql-users.sql` as a database administrator in the
+   application database. Select and execute the entire file as one batch. It
+   removes only `ocr_api_reader` and `ocr_functions_writer`, requires the Entra
+   replacement users to exist, and rolls back both removals on failure. It does
+   not prove that no other application uses those accounts; verify that before
+   running it. Restart the API and verify reads after the removal, then upload
+   one synthetic document to verify the cloud Functions flow.
 
 The Azure CLI profile in `ocr-api/.azure-sql/` contains sensitive cached login
 data. It is ignored by Git and created with owner-only directory permissions.
@@ -275,6 +282,9 @@ Azure Functions use their own managed identity via the Azure `SqlConnection`
 setting with `Authentication=Active Directory Managed Identity`. This is
 separate from local API authentication. Local Functions configuration is also
 separate and must not use the cloud managed-identity setting on a developer Mac.
+For the cloud-only OCR workflow, remove `Values.SqlConnection` from local
+`local.settings.json` and any old build copies. Local Functions would need a
+separately configured developer writer identity before they can access SQL.
 
 ## Architecture
 
