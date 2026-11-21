@@ -1,12 +1,16 @@
 # Bezpečnostní audit — bod 4
 
 Datum: 17. 11. 2026. Výchozí větev `foundry-agent-experiment`, commit `6407f07`.
-Pracovní strom byl před úpravami čistý. Commit, push ani nasazení nejsou součástí provedené práce.
+Pracovní strom byl před úpravami čistý. Aktualizováno 21. 11. 2026:
+implementace je v commitu `8473c7e`; uživatelka potvrdila ruční push a nasazení.
+Implementace a dohodnutá provozní zkouška jsou dokončené v níže vymezeném rozsahu.
+Zbývající omezení nejsou tímto prohlášením odstraněna.
 
 ## Mapa toku dat a původní nálezy
 
 `FACT` označuje závěr doložený lokálním zdrojovým kódem nebo syntetickým testem;
-`UNKNOWN` skutečnost, kterou bez cloudového ověření nelze potvrdit.
+`REPORTED` výsledek doložený výpisem nebo potvrzením uživatelky v konverzaci;
+`UNKNOWN` skutečnost, kterou provedené kontroly nepotvrzují.
 
 | Vrstva | Tok a původní problém — FACT | Provedená změna |
 | --- | --- | --- |
@@ -59,7 +63,7 @@ workflow. Vlastní klienty je potřeba přepnout na POST. Frontend a oba agenti 
 upravené společně. Search již neslouží k vracení plného kontaktového záznamu.
 Preview už nevrací `prompt_for_model`, ale `messages`, které používá i answer.
 
-## Provedené kontroly — FACT
+## Lokální kontroly provedené asistentem — FACT
 
 1. `node --test ocr-api/test/*.test.js`: **51/51 úspěšných testů**.
    Původní testy lokálního přístupu a Entra zůstaly; nové testy kontrolují
@@ -94,12 +98,57 @@ dotnet build tests/PrivacyChecks/PrivacyChecks.csproj --no-restore -p:UseSharedC
 dotnet tests/PrivacyChecks/bin/Debug/net10.0/PrivacyChecks.dll
 ```
 
-Nevykonávaly se produkční entry pointy API/agentů, přihlášení, skutečné dotazy do
-SQL, Search ani modelu, OCR volání, uploady nebo browser. Obsah `.env`,
+Při původní lokální implementaci asistent nevykonával produkční entry pointy
+API/agentů, přihlášení, skutečné dotazy do SQL, Search ani modelu, OCR volání,
+uploady nebo browser. Pozdější živé testy spouštěla uživatelka podle domluveného
+postupu; jejich důkazy jsou uvedené samostatně níže. Obsah `.env`,
 `local.settings.json`, tokenů ani přihlašovacích profilů se nečetl. Vznikly jen
 zdrojové změny, syntetické testy a lokální build artefakty. Historické logy se nemazaly.
 
-## Zbývající omezení a ověření po dohodě
+## Provozní ověření 21. 11. 2026 — REPORTED
+
+Uživatelka výslovně potvrdila, že všechny životopisy v projektu jsou syntetické.
+Živé kroky spouštěla sama; asistent nečetl autentizační profily, nepřebíral
+přihlašovací údaje a neovládal přihlášený browser.
+
+- Nasazení `nordic-lumberjack-functions` skončilo podle poskytnutého terminálového
+  výpisu úspěšně, bez build chyb (6 upozornění). Po synchronizaci byly registrované
+  `ProcessImageUpload` jako blob trigger a `ProcessCandidateData` jako queue trigger.
+- Po restartu lokální aplikace bylo čtení SQL zablokované firewallem pro klientskou
+  IP. Uživatelka po pokynu k přidání úzkého IP pravidla potvrdila, že se kandidáti
+  načítají. Skutečná uložená firewallová pravidla nebyla asistentem zkontrolována.
+- Nový syntetický upload je ve frontendu jako kandidát **31**, včetně OCR textu.
+  Po zpracování má stav `CONTACT_PARTIAL`: telefon je v OCR na samostatném řádku
+  bez popisku, ale nebyl extrahován do pole `phone`. Zdrojový extraktor vyžaduje
+  popisek; jeho pravidlo se při této opravě neměnilo.
+- `ProcessImageUpload`: v portálu úspěšné volání **21. 11. 2026 22:43:01**,
+  po rozkliknutí bez zobrazených zpráv.
+- `ProcessCandidateData`: v portálu úspěšné volání **21. 11. 2026 22:43:17**,
+  poskytnutá aplikační zpráva pouze `candidate_updated RowsAffected=1`.
+  Časy jsou převzaté z výpisu portálu. V těchto prohlédnutých detailech se
+  nezobrazovaly kontakty ani OCR; nejde o kontrolu všech cloudových logů.
+- RAG ve frontendu úspěšně vrátil porovnání a doporučení pro 3 syntetické kandidáty
+  (ID 1, 23 a 16). Poskytnutá odpověď neobsahovala e-maily ani telefonní čísla.
+- Jednorázový agent vrátil profesní shrnutí kandidáta **31**, bez kontaktů,
+  celého OCR a ladicích bloků v poskytnutém výstupu.
+- Uživatelka potvrdila také chatový test: navazující otázka zůstala u kandidáta
+  **31**, bez kontaktů a ladicích výpisů; postup zahrnoval ukončení pomocí `exit`.
+- V agentní odpovědi se místo jména objevil nadpis `KDO JSEM`. Původ této chyby
+  nebyl ověřen proti databázovému poli jména; evidujeme ji jako samostatný problém
+  kvality extrakce či odpovědi. Neprohlašujeme profesní tvrzení modelu za ověřená.
+
+Dodatečná kontrola asistenta — **FACT**: skutečná lokální projekce pro RAG,
+agentní hledání a detail prošla syntetickým případem `phone: null` s neoznačeným
+telefonem přímo v OCR. Ve všech třech kontextech byl telefon odstraněn a profesní
+text zachován. Kontrola nevolala žádnou externí službu a neměnila zdrojový kód.
+
+Provozní zkouška potvrzuje funkčnost úspěšných průchodů a uvedené výstupy.
+Samotná odpověď bez kontaktů nedokazuje jejich nepřítomnost ve vstupu modelu:
+modelové payloady byly kontrolovány lokálními testy a revizí kódu, nikoli zachycením
+živých požadavků. Cloudové chybové větve nebyly záměrně vyvolávané; pokrývají je
+lokální syntetické testy.
+
+## Zbývající omezení
 
 - **FACT:** Jde o minimalizaci, ne anonymizaci. Model stále dostává jména, ID
   a omezené výňatky OCR. Heuristiky nezaručují rozpoznání všech adres, osobních údajů,
@@ -115,48 +164,37 @@ zdrojové změny, syntetické testy a lokální build artefakty. Historické log
   údaje. Do argumentů CLI nezadávat kontakty; profesní dotazy lze psát v chatu.
 - **FACT:** Bezpečné aplikační chyby mají méně diagnostického detailu. Chybové
   události a počty zůstaly. Vypnutí dependency tracking omezuje korelaci závislostí.
-- **UNKNOWN:** Skutečné logy Azure, app-setting přepisy `host.json`, binding chyby
+- **UNKNOWN:** Úplnost logů Azure mimo výše prohlédnuté běhy, app-setting přepisy `host.json`, binding chyby
   vzniklé před vstupem do funkce, startup/host chyby, údaje o názvech blobů,
   infrastruktura/proxy, provider retention a serverová diagnostika modelu nejsou
   ověřené. SDK debug zákaz neřídí serverové ukládání. Názvy uploadů by neměly
   obsahovat kontakty. Nepřidávat tracing těl požadavků ani `NODE_DEBUG`/instrumentaci
   mimo tuto aplikační hranici.
-- **UNKNOWN:** Kvalita skutečných RAG/agentních odpovědí a cloudový end-to-end provoz
-  se bez externích služeb nepotvrzují. Lokální zdrojové opravy se v cloudu projeví
-  až nasazením; v lokální aplikaci po restartu.
+- **UNKNOWN:** Věcná správnost profesních tvrzení modelu, úplnost redakce na všech
+  možných OCR vstupech a přesný živý payload nejsou potvrzené. Nebylo samostatně
+  ověřeno, že nový kandidát 31 už prošel indexací do Search: živý RAG našel jiné
+  syntetické kandidáty, zatímco agentní detail 31 čte SQL.
 - Staré logy mohou stále obsahovat data z předchozí verze. Jejich retence,
   prohlédnutí nebo cílené odstranění jsou samostatný krok, nikoli výsledek této změny.
 
-Po předchozí dohodě lze nasadit Functions a použít jeden čistě syntetický dokument
-s unikátními kontaktovými značkami: ověřit OCR → SQL → queue → Search → UI/RAG/agent,
-zkontrolovat nové běžné i chybové logy a modelový payload a potvrdit, že se značky
-neobjevily v diagnostice. Rozsah uploadu, cloudové zápisy, logy a úklid je nutné
-domluvit předem. Tento krok zatím nebyl proveden.
+Pro původní bod 4 není nutné rozšiřovat extrakci neoznačených telefonů ani opravit
+rozpoznávání jmen. Tyto otázky kvality dat zůstávají samostatně evidované. Případné
+cloudové testy chyb, kontrola dalších zdrojů telemetrie, nastavení retence nebo
+úklid uložených dat vyžadují další dohodu o konkrétním rozsahu.
 
-## Ruční commit a push
+## Ruční commit a push aktualizace záznamu
 
-Z kořene projektu po kontrole změn:
+Implementační commit `8473c7e` již uživatelka vytvořila a potvrdila jeho push.
+Po aktualizaci tohoto dokumentu zbývá uložit pouze záznam provozního ověření:
 
 ```sh
-git status --short
 git diff --check
-git diff
-git add -- .gitignore README.md docs/security-step-4.md \
-  ocr-api/app.js ocr-api/model-data.js ocr-api/runtime-privacy.js \
-  ocr-api/agent.js ocr-api/agent-runtime.js ocr-api/server.js \
-  ocr-api/local-agent.js ocr-api/local-agent-chat.js ocr-api/test/privacy.test.js \
-  ocr-frontend/src/App.jsx \
-  msdocs-storage-bind-function-service-main/dotnet/ProcessImage/Function1.cs \
-  msdocs-storage-bind-function-service-main/dotnet/ProcessImage/ProcessCandidateData.cs \
-  msdocs-storage-bind-function-service-main/dotnet/ProcessImage/SafeExecution.cs \
-  msdocs-storage-bind-function-service-main/dotnet/ProcessImage/Program.cs \
-  msdocs-storage-bind-function-service-main/dotnet/ProcessImage/host.json \
-  tests/PrivacyChecks/PrivacyChecks.csproj tests/PrivacyChecks/Program.cs tests/PrivacyChecks/NuGet.Config
+git diff -- docs/security-step-4.md
+git add -- docs/security-step-4.md
 git diff --cached --stat
-git diff --cached
-git commit -m "Minimize model data and remove sensitive diagnostic logs"
+git commit -m "Document step 4 deployment and synthetic live checks"
 git push origin foundry-agent-experiment
 ```
 
-Před commitem zkontrolovat i nové soubory v staged diffu. Žádný příkaz výše
-nenasazuje aplikaci do Azure.
+Asistent tuto aktualizaci necommitoval ani nepushoval. Dokumentační změna
+nevyžaduje nové nasazení aplikace.
