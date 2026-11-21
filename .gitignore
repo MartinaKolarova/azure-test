@@ -13,3 +13,7 @@
 # Optional OAuth/token files (pokud by se někdy objevily)
 **/credentials.json
 **/token.json
+
+# Offline synthetic C# checks
+/tests/PrivacyChecks/bin/
+/tests/PrivacyChecks/obj/

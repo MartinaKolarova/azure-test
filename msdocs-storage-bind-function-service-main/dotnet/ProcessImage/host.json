@@ -1,7 +1,17 @@
 {
     "version": "2.0",
     "logging": {
+        "logLevel": {
+            "default": "Warning",
+            "Host.Results": "Information",
+            "Host.Aggregator": "Information",
+            "Function.ProcessCandidateData.User": "Information",
+            "Azure": "None",
+            "System.Net.Http.HttpClient": "None"
+        },
         "applicationInsights": {
+            "enableDependencyTracking": false,
+            "enableLiveMetrics": false,
             "samplingSettings": {
                 "isEnabled": true,
                 "excludedTypes": "Request"

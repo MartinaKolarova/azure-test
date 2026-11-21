@@ -119,36 +119,34 @@ Current endpoints:
 ```text
 GET /candidates
 GET /candidates/:id
-GET /candidates/search/:text
-GET /candidates/rag/:question
-GET /candidates/rag-answer/:question
+POST /candidates/search
+POST /candidates/rag
+POST /candidates/rag-answer
 ```
 
 #### Search Endpoint
 
 ```text
-GET /candidates/search/:text
+POST /candidates/search
 ```
 
-Uses Azure AI Search to retrieve relevant candidates.
+Accepts JSON `{ "query": "professional skills" }`. Uses Azure AI Search to return up to five minimised candidate profiles (ID, name, redacted excerpt).
 
 #### RAG Preview Endpoint
 
 ```text
-GET /candidates/rag/:question
+POST /candidates/rag
 ```
 
-Retrieves relevant candidates from Azure AI Search and prepares the prompt/context for a model.
-
-This endpoint is useful for debugging the retrieval step.
+Accepts JSON `{ "question": "professional skills" }`. Returns up to three minimised profiles and the exact `messages` prepared for the model. The preview uses the same data boundary as the answer endpoint; it contains no raw API records. Treat the preview as personal data, not as a diagnostic log.
 
 #### RAG Answer Endpoint
 
 ```text
-GET /candidates/rag-answer/:question
+POST /candidates/rag-answer
 ```
 
-Retrieves relevant candidates from Azure AI Search, sends the selected context to an Azure AI Foundry model, and returns a generated answer.
+Accepts JSON `{ "question": "professional skills" }`. Retrieves up to three candidates, removes known/pattern-matched contacts from bounded excerpts, sends the allowlisted context to the model, and returns a generated answer. Text-bearing GET routes have been removed to keep questions out of URL logs. Update custom clients to POST; the frontend and local agents already use POST.
 
 The model is instructed to answer only from the provided candidate data and not invent missing information.
 
@@ -197,7 +195,7 @@ The API includes basic safety measures for the RAG endpoint:
 - rate limiting for AI requests
 - question length validation
 - duplicate candidates filtered out
-- contact details are not sent to the model context
+- explicit contact fields and file metadata are excluded from model payloads; known and recognisable contacts are redacted from bounded free-text excerpts (heuristic, not guaranteed anonymisation)
 - technical error details are not exposed in API responses
 
 Secrets and API keys are stored in local environment variables and should not be committed to Git.
@@ -223,8 +221,8 @@ are separate; update each privately. Keep `.env` and `local.settings.json` ignor
 only by their owner (file mode `600` on macOS). Never put credentials in frontend
 code or `VITE_*` variables.
 
-Run `npm test` in `ocr-api` for synthetic local-access checks. These tests do not
-load credentials or contact Azure. SQL firewall rules based on the current
+Run `npm test` in `ocr-api` for synthetic local-access, identity, privacy, API and agent checks. These tests do not
+load credentials or contact Azure. See [security audit step 4](docs/security-step-4.md) for data flows, limits, offline verification and manual commit instructions. SQL firewall rules based on the current
 Functions outbound IP list may need maintenance on the Consumption plan; they
 are separate from the API's local-only boundary.
 
@@ -353,7 +351,7 @@ Possible next steps:
 - add project documentation diagrams
 - explore agent-based workflows later
 
-Agent-based processing is not currently required. It may become useful later if the model needs to perform multi-step actions, such as retrieving details, comparing candidates, and updating candidate status.
+Experimental read-only agents are available in `ocr-api/local-agent.js` and `ocr-api/local-agent-chat.js`. Both share the same data-minimisation boundary. They can search and compare professional profiles; contacts and original OCR remain in the local UI. Chat retains at most two completed question/answer exchanges and no tool transcripts between turns. Type `reset` to clear its context and `exit` to close. Use professional queries without personal contact data; command-line arguments can remain in shell history.
 
 ## Status
 

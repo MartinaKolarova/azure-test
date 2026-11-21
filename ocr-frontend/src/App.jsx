@@ -21,12 +21,9 @@ function App() {
 
         const data = await response.json();
 
-        console.log('Candidates from API:', data);
-
         setCandidates(data);
-      } catch (error) {
-        console.error(error);
-        setError(error.message);
+      } catch {
+        setError('Kandidáty se nepodařilo načíst.');
       } finally {
         setLoading(false);
       }
@@ -45,10 +42,10 @@ function App() {
     setAiAnswer(null);
 
     try {
-      const encodedQuestion = encodeURIComponent(aiQuestion);
-
       const response = await fetch(
-        `http://localhost:3000/candidates/rag-answer/${encodedQuestion}`,
+        'http://localhost:3000/candidates/rag-answer',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: aiQuestion }), cache: 'no-store' },
       );
 
       if (!response.ok) {
@@ -57,12 +54,9 @@ function App() {
 
       const data = await response.json();
 
-      console.log('AI answer:', data);
-
       setAiAnswer(data);
-    } catch (error) {
-      console.error(error);
-      setAiError(error.message);
+    } catch {
+      setAiError('Odpověď se nepodařilo získat. Zkontrolujte délku dotazu a zkuste to znovu.');
     } finally {
       setAiLoading(false);
     }
@@ -86,6 +80,7 @@ function App() {
           onChange={(event) => setAiQuestion(event.target.value)}
           placeholder="Zeptej se na kandidáty..."
           rows={3}
+          maxLength={500}
           style={{
             width: '100%',
             padding: '8px',

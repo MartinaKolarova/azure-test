@@ -11,10 +11,16 @@ namespace ProcessImage
     public class ProcessCandidateData
     {
         [Function("ProcessCandidateData")]
-        public async Task Run(
+        public Task Run(
             [QueueTrigger("candidate-processing", Connection = "StorageConnection")]
             string candidateId,
             FunctionContext context)
+        {
+            return SafeExecution.RunAsync("candidate_processing_failed",
+                () => ProcessAsync(candidateId, context));
+        }
+
+        private async Task ProcessAsync(string candidateId, FunctionContext context)
         {
             var log = context.GetLogger("ProcessCandidateData");
 
@@ -26,9 +32,9 @@ namespace ProcessImage
                 throw new Exception("SqlConnection is NULL");
             }
 
-            if (!int.TryParse(candidateId, out int parsedCandidateId))
+            if (!int.TryParse(candidateId, out int parsedCandidateId) || parsedCandidateId <= 0)
             {
-                log.LogError($"Invalid candidate_id from queue: {candidateId}");
+                log.LogError("candidate_queue_id_invalid");
                 return;
             }
 
@@ -130,8 +136,7 @@ else
                     int rowsAffected =
                         await updateCommand.ExecuteNonQueryAsync();
 
-                    log.LogInformation(
-                        $"CandidateId={candidateId}, OcrLoaded={!string.IsNullOrWhiteSpace(ocrText)}, FullName={fullName}, Email={email}, Phone={phone}, RowsAffected={rowsAffected}");
+                    log.LogInformation("candidate_updated RowsAffected={RowsAffected}", rowsAffected);
                 }
             }
         }

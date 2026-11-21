@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Microsoft.Azure.CognitiveServices.Vision.ComputerVision;
 using Microsoft.Azure.CognitiveServices.Vision.ComputerVision.Models;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
 using Microsoft.Data.SqlClient;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
@@ -18,14 +17,17 @@ namespace ProcessImage
         // Azure Function name and output Binding to Table Storage
 [Function("ProcessImageUpload")]       
         // Trigger binding runs when an image is uploaded to the blob container below
-        public async Task Run([BlobTrigger("imageanalysis/{name}", Connection = "StorageConnection")]Stream myBlob, string name, ILogger log)
+        public Task Run([BlobTrigger("imageanalysis/{name}", Connection = "StorageConnection")]Stream myBlob, string name)
+        {
+            return SafeExecution.RunAsync("image_processing_failed", () => ProcessAsync(myBlob, name));
+        }
+
+        private async Task ProcessAsync(Stream myBlob, string name)
         {
             // Get connection configurations
             string subscriptionKey = Environment.GetEnvironmentVariable("ComputerVisionKey");
             string endpoint = Environment.GetEnvironmentVariable("ComputerVisionEndpoint");
             
-            string imgUrl = $"https://{ Environment.GetEnvironmentVariable("StorageAccountName")}.blob.core.windows.net/imageanalysis/{name}";
-
             ComputerVisionClient client = new ComputerVisionClient(new ApiKeyServiceClientCredentials(subscriptionKey)) { Endpoint = endpoint };
 
             // Get the analyzed image contents
@@ -69,7 +71,8 @@ QueueClient queueClient =
         "candidate-processing",
     new QueueClientOptions
     {
-        MessageEncoding = QueueMessageEncoding.Base64
+        MessageEncoding = QueueMessageEncoding.Base64,
+        Diagnostics = { IsLoggingEnabled = false, IsLoggingContentEnabled = false }
     }
     );
 
